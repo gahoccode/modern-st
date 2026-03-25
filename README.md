@@ -74,6 +74,24 @@ modern-st/
 | Min Volatility | Minimize portfolio standard deviation |
 | Max Utility | Maximize quadratic utility given risk aversion |
 
+### MCP Server (Claude Desktop)
+
+Add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "pyopt": {
+      "command": "uv",
+      "args": ["run", "python", "server.py"],
+      "cwd": "/path/to/modern-st"
+    }
+  }
+}
+```
+
+This exposes 5 tools to Claude: `symbols`, `optimize`, `hrp`, `allocate`, and `risk`.
+
 ## Dependencies
 
 | Package | Purpose |
