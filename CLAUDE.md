@@ -31,7 +31,8 @@ pyopt_cli.py              ← CLI wrapper (streamlit run app.py)
 backend/
 ├── services/
 │   ├── data_service.py       ← vnstock data fetching (pure Python)
-│   └── optimization_service.py ← PyPortfolioOpt logic (pure Python)
+│   ├── optimization_service.py ← PyPortfolioOpt logic (pure Python)
+│   └── risk_service.py        ← riskfolio-lib risk metrics (pure Python)
 └── api/
     ├── exceptions.py         ← domain exceptions + HTTP error handlers
     ├── models.py             ← Pydantic request/response models
@@ -43,7 +44,7 @@ backend/
 
 **Data flow:** User sidebar inputs → `backend/services/data_service` (vnstock API) → pandas price matrix → `backend/services/optimization_service` (PyPortfolioOpt) → `streamlit_app.py` visualization (matplotlib/altair) + export (riskfolio-lib Excel reports)
 
-**API endpoints (6 routes, mounted at `/api`):**
+**API endpoints (7 routes, mounted at `/api`):**
 
 | Method | Path | Description | MCP |
 |--------|------|-------------|-----|
@@ -53,6 +54,7 @@ backend/
 | `POST` | `/api/optimize` | Run all 3 optimization strategies | tool |
 | `POST` | `/api/hrp` | Run Hierarchical Risk Parity optimization | tool |
 | `POST` | `/api/allocate` | Convert weights to discrete share counts (VND) | tool |
+| `POST` | `/api/risk` | Portfolio risk analysis (24 metrics) | tool |
 
 **MCP server** (`server.py`): `FastMCP.from_fastapi()` auto-converts FastAPI routes into MCP tools via the OpenAPI schema. Routes tagged `internal` are excluded via `mcp.disable(tags={"internal"})`.
 

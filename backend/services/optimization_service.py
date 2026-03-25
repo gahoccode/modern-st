@@ -45,6 +45,14 @@ class OptimizationResults:
     mu: pd.Series
     cov_matrix: pd.DataFrame
 
+    def weights_by_strategy(self) -> dict[str, dict[str, float]]:
+        """Return strategy-slug to weights mapping."""
+        return {
+            "max_sharpe": self.max_sharpe.weights,
+            "min_volatility": self.min_volatility.weights,
+            "max_utility": self.max_utility.weights,
+        }
+
 
 @dataclass
 class HRPResult:
@@ -113,6 +121,28 @@ def compute_optimizations(
         ),
         mu=mu,
         cov_matrix=cov_matrix,
+    )
+
+
+def compute_single_strategy(
+    prices_df: pd.DataFrame,
+    strategy: str,
+    risk_aversion: float = 1.0,
+) -> PortfolioResult:
+    """Run a single optimization strategy and return its result."""
+    mu = expected_returns.mean_historical_return(prices_df)
+    cov_matrix = risk_models.sample_cov(prices_df)
+    ef = EfficientFrontier(mu, cov_matrix)
+    if strategy == "max_sharpe":
+        ef.max_sharpe()
+    elif strategy == "min_volatility":
+        ef.min_volatility()
+    else:
+        ef.max_quadratic_utility(risk_aversion=risk_aversion, market_neutral=False)
+    weights = ef.clean_weights()
+    ret, vol, sharpe = ef.portfolio_performance()
+    return PortfolioResult(
+        weights=weights, expected_return=ret, volatility=vol, sharpe_ratio=sharpe
     )
 
 

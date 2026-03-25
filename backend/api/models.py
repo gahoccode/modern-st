@@ -11,32 +11,38 @@ from backend.services.optimization_service import PortfolioResult
 Strategy = Literal["max_sharpe", "min_volatility", "max_utility"]
 
 
-class OptimizeRequest(BaseModel):
-    """Request body for portfolio optimization."""
+class PortfolioBaseRequest(BaseModel):
+    """Shared fields for all portfolio-related requests."""
 
     symbols: list[str] = Field(..., description="Stock ticker symbols (e.g. ['FPT', 'HPG'])")
     start_date: str = Field(..., description="Start date in YYYY-MM-DD format")
     end_date: str = Field(..., description="End date in YYYY-MM-DD format")
+
+
+class OptimizeRequest(PortfolioBaseRequest):
+    """Request body for portfolio optimization."""
+
     risk_aversion: float = Field(1.0, ge=0, description="Risk aversion parameter for max-utility")
 
 
-class HRPRequest(BaseModel):
+class HRPRequest(PortfolioBaseRequest):
     """Request body for Hierarchical Risk Parity optimization."""
 
-    symbols: list[str] = Field(..., description="Stock ticker symbols")
-    start_date: str = Field(..., description="Start date in YYYY-MM-DD format")
-    end_date: str = Field(..., description="End date in YYYY-MM-DD format")
 
-
-class AllocateRequest(BaseModel):
+class AllocateRequest(PortfolioBaseRequest):
     """Request body for discrete share allocation."""
 
-    symbols: list[str] = Field(..., description="Stock ticker symbols")
-    start_date: str = Field(..., description="Start date in YYYY-MM-DD format")
-    end_date: str = Field(..., description="End date in YYYY-MM-DD format")
     strategy: Strategy = Field(..., description="Optimization strategy to allocate from")
     portfolio_value: float = Field(..., gt=0, description="Total portfolio value in VND")
     risk_aversion: float = Field(1.0, ge=0, description="Risk aversion (used by max_utility)")
+
+
+class RiskRequest(PortfolioBaseRequest):
+    """Request body for portfolio risk analysis."""
+
+    strategy: Strategy = Field(..., description="Optimization strategy to analyze")
+    risk_aversion: float = Field(1.0, ge=0, description="Risk aversion (used by max_utility)")
+    alpha: float = Field(0.05, gt=0, lt=1, description="Significance level for VaR/CVaR/etc.")
 
 
 class PortfolioResultResponse(BaseModel):

@@ -6,19 +6,24 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 
-class DataFetchError(Exception):
-    """Raised when stock data cannot be fetched or is empty."""
+class PyoptError(Exception):
+    """Base exception for pyopt domain errors."""
+
+    status_code: int = 500
 
 
-class ProcessingError(Exception):
+class DataFetchError(PyoptError):
+    """Raised when stock data cannot be fetched or is empty (upstream failure)."""
+
+    status_code: int = 502
+
+
+class ProcessingError(PyoptError):
     """Raised when price data processing produces no valid results."""
 
-
-async def data_fetch_handler(request: Request, exc: DataFetchError) -> JSONResponse:
-    """Convert DataFetchError to a 400 JSON response."""
-    return JSONResponse(status_code=400, content={"error": str(exc)})
+    status_code: int = 422
 
 
-async def processing_handler(request: Request, exc: ProcessingError) -> JSONResponse:
-    """Convert ProcessingError to a 400 JSON response."""
-    return JSONResponse(status_code=400, content={"error": str(exc)})
+async def pyopt_error_handler(request: Request, exc: PyoptError) -> JSONResponse:
+    """Convert any PyoptError to a JSON response with the appropriate status code."""
+    return JSONResponse(status_code=exc.status_code, content={"error": str(exc)})

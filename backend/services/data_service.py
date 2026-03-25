@@ -36,9 +36,6 @@ def fetch_portfolio_stock_data(
             )
 
             if not historical_data.empty:
-                if "time" not in historical_data.columns:
-                    historical_data["time"] = historical_data.index
-
                 all_data[symbol] = historical_data
         except Exception as e:
             raise ValueError(f"Error fetching data for {symbol}: {e}") from e
@@ -58,13 +55,16 @@ def process_portfolio_price_data(
     for symbol, data in all_historical_data.items():
         if data.empty:
             continue
-        df = data.copy()
-        if "time" not in df.columns:
-            df["time"] = df.index
-        series_list.append(df.set_index("time")["close"].rename(symbol))
+        source = data if "time" in data.columns else data.assign(time=data.index)
+        series_list.append(source.set_index("time")["close"].rename(symbol))
 
     if not series_list:
         return pd.DataFrame()
 
     prices_df = pd.concat(series_list, axis=1).sort_index().dropna()
     return prices_df
+
+
+def compute_returns(prices_df: pd.DataFrame) -> pd.DataFrame:
+    """Compute simple percentage returns from a price matrix."""
+    return prices_df.pct_change().dropna()

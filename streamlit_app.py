@@ -11,6 +11,9 @@ from pypfopt import EfficientFrontier, plotting
 
 from backend.services.data_service import DEFAULT_SYMBOLS
 from backend.services.data_service import (
+    compute_returns as _compute_returns,
+)
+from backend.services.data_service import (
     fetch_portfolio_stock_data as _fetch_portfolio_stock_data,
 )
 from backend.services.data_service import (
@@ -291,7 +294,7 @@ with st.expander("View Price Data"):
 # Portfolio optimization (delegated to backend service)
 # ---------------------------------------------------------------------------
 
-returns = prices_df.pct_change().dropna()
+returns = _compute_returns(prices_df)
 opt_results = cached_compute_optimizations(prices_df, risk_aversion)
 
 ms = opt_results.max_sharpe
@@ -564,7 +567,7 @@ with tab4:
         with col2:
             st.info(f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-        filepath_xlsx = pathlib.Path(str(filepath_base) + ".xlsx")
+        filepath_xlsx = filepath_base.with_suffix(".xlsx")
         with filepath_xlsx.open("rb") as file:
             st.download_button(
                 label="Download Excel Report",

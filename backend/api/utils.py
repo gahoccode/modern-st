@@ -9,7 +9,7 @@ from backend.services.data_service import fetch_portfolio_stock_data, process_po
 
 
 def get_price_matrix(
-    symbols: list[str], start_date: str, end_date: str
+    symbols: list[str], start_date: str, end_date: str, interval: str = "1D"
 ) -> pd.DataFrame:
     """Fetch raw stock data and process into a price matrix.
 
@@ -17,7 +17,7 @@ def get_price_matrix(
         DataFetchError: If no data is returned for the given symbols.
         ProcessingError: If the processed price matrix is empty.
     """
-    raw = fetch_portfolio_stock_data(symbols, start_date, end_date, "1D")
+    raw = fetch_portfolio_stock_data(symbols, start_date, end_date, interval)
     if not raw:
         raise DataFetchError(f"No data fetched for symbols: {symbols}")
     prices_df = process_portfolio_price_data(raw)

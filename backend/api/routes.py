@@ -10,26 +10,24 @@ from importlib.metadata import PackageNotFoundError, version
 
 from fastapi import APIRouter, FastAPI
 
-from backend.api.exceptions import (
-    DataFetchError,
-    ProcessingError,
-    data_fetch_handler,
-    processing_handler,
-)
+from backend.api.exceptions import PyoptError, pyopt_error_handler
 from backend.api.models import (
     AllocateRequest,
     HRPRequest,
     OptimizeRequest,
     PortfolioResultResponse,
+    RiskRequest,
 )
 from backend.api.utils import get_price_matrix
-from backend.services.data_service import DEFAULT_SYMBOLS, load_stock_symbols
+from backend.services.data_service import DEFAULT_SYMBOLS, compute_returns, load_stock_symbols
 from backend.services.optimization_service import (
     STRATEGY_CHOICES,
     compute_discrete_allocation,
     compute_hrp,
     compute_optimizations,
+    compute_single_strategy,
 )
+from backend.services.risk_service import compute_risk_metrics
 
 try:
     APP_VERSION = version("pyopt")
@@ -85,7 +83,7 @@ async def optimize(body: OptimizeRequest) -> dict:
 async def hrp(body: HRPRequest) -> dict:
     """Run Hierarchical Risk Parity optimization on the given symbols."""
     prices_df = get_price_matrix(body.symbols, body.start_date, body.end_date)
-    returns = prices_df.pct_change().dropna()
+    returns = compute_returns(prices_df)
     hrp_result = compute_hrp(returns)
     return {
         "symbols": body.symbols,
@@ -99,17 +97,8 @@ async def hrp(body: HRPRequest) -> dict:
 async def allocate(body: AllocateRequest) -> dict:
     """Convert optimization weights into discrete share counts in VND."""
     prices_df = get_price_matrix(body.symbols, body.start_date, body.end_date)
-    opt = compute_optimizations(prices_df, body.risk_aversion)
-
-    strategy_weights = {
-        "max_sharpe": opt.max_sharpe.weights,
-        "min_volatility": opt.min_volatility.weights,
-        "max_utility": opt.max_utility.weights,
-    }
-
-    result = compute_discrete_allocation(
-        strategy_weights[body.strategy], prices_df, body.portfolio_value
-    )
+    opt_result = compute_single_strategy(prices_df, body.strategy, body.risk_aversion)
+    result = compute_discrete_allocation(opt_result.weights, prices_df, body.portfolio_value)
     return {
         "symbols": body.symbols,
         "strategy": body.strategy,
@@ -117,6 +106,26 @@ async def allocate(body: AllocateRequest) -> dict:
         "allocation": result.allocation,
         "leftover": round(result.leftover, 2),
         "allocated": round(body.portfolio_value - result.leftover, 2),
+    }
+
+
+@router.post("/risk", summary="Run portfolio risk analysis")
+async def risk(body: RiskRequest) -> dict:
+    """Compute risk metrics for a given strategy.
+
+    Returns return-based, drawdown-based, and risk-adjusted ratios.
+    """
+    prices_df = get_price_matrix(body.symbols, body.start_date, body.end_date)
+    opt_result = compute_single_strategy(prices_df, body.strategy, body.risk_aversion)
+    returns = compute_returns(prices_df)
+    metrics = compute_risk_metrics(returns, opt_result.weights, alpha=body.alpha)
+    return {
+        "symbols": body.symbols,
+        "strategy": body.strategy,
+        "start_date": body.start_date,
+        "end_date": body.end_date,
+        "alpha": body.alpha,
+        **metrics,
     }
 
 
@@ -130,5 +139,4 @@ api = FastAPI(
     description="Vietnamese stock portfolio optimization API",
 )
 api.include_router(router)
-api.add_exception_handler(DataFetchError, data_fetch_handler)
-api.add_exception_handler(ProcessingError, processing_handler)
+api.add_exception_handler(PyoptError, pyopt_error_handler)
