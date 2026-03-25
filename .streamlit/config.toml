@@ -1,3 +1,6 @@
+[server]
+useStarlette = true
+
 [theme]
 base= "light"
 linkUnderline = false

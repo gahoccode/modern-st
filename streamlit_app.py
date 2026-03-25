@@ -7,25 +7,75 @@ import numpy as np
 import pandas as pd
 import riskfolio as rp
 import streamlit as st
-from pypfopt import (
-    DiscreteAllocation,
-    EfficientFrontier,
-    HRPOpt,
-    expected_returns,
-    plotting,
-    risk_models,
+from pypfopt import EfficientFrontier, plotting
+
+from backend.services.data_service import DEFAULT_SYMBOLS
+from backend.services.data_service import (
+    fetch_portfolio_stock_data as _fetch_portfolio_stock_data,
 )
-from pypfopt.discrete_allocation import get_latest_prices
-from vnstock import Listing, Quote
+from backend.services.data_service import (
+    load_stock_symbols as _load_stock_symbols,
+)
+from backend.services.data_service import (
+    process_portfolio_price_data as _process_portfolio_price_data,
+)
+from backend.services.optimization_service import (
+    STRATEGY_CHOICES,
+    STRATEGY_MAP,
+    HRPResult,
+    OptimizationResults,
+    compute_discrete_allocation,
+    compute_hrp,
+    compute_optimizations,
+)
 
-VNSTOCK_PRICE_UNIT = 1000
+# ---------------------------------------------------------------------------
+# Thin caching wrappers — delegate to framework-agnostic backend services
+# ---------------------------------------------------------------------------
 
-STRATEGY_MAP = {
-    "Max Sharpe Portfolio": ("Max Sharpe", "Max_Sharpe_Portfolio"),
-    "Min Volatility Portfolio": ("Min Volatility", "Min_Volatility_Portfolio"),
-    "Max Utility Portfolio": ("Max Utility", "Max_Utility_Portfolio"),
-}
-STRATEGY_CHOICES = list(STRATEGY_MAP.keys())
+
+@st.cache_data(max_entries=1)
+def load_stock_symbols() -> list[str]:
+    """Cached wrapper for backend data service."""
+    return _load_stock_symbols()
+
+
+@st.cache_data
+def fetch_portfolio_stock_data(
+    symbols: tuple[str, ...],
+    start_date_str: str,
+    end_date_str: str,
+    interval: str,
+) -> dict[str, pd.DataFrame]:
+    """Cached wrapper for backend data service."""
+    return _fetch_portfolio_stock_data(list(symbols), start_date_str, end_date_str, interval)
+
+
+def process_portfolio_price_data(
+    all_historical_data: dict[str, pd.DataFrame],
+) -> pd.DataFrame:
+    """Thin wrapper — no cache needed; input is already a cached dict and transform is cheap."""
+    return _process_portfolio_price_data(all_historical_data)
+
+
+@st.cache_data
+def cached_compute_optimizations(
+    prices_df: pd.DataFrame,
+    risk_aversion: float,
+) -> "OptimizationResults":
+    """Cached wrapper for backend optimization service."""
+    return compute_optimizations(prices_df, risk_aversion)
+
+
+@st.cache_data
+def cached_compute_hrp(returns: pd.DataFrame) -> "HRPResult":
+    """Cached wrapper for backend optimization service."""
+    return compute_hrp(returns)
+
+
+# ---------------------------------------------------------------------------
+# UI helper functions
+# ---------------------------------------------------------------------------
 
 
 def display_weights_table(weights: dict[str, float], label: str) -> None:
@@ -116,84 +166,15 @@ div[data-testid="stAlert"] p {
 """)
 
 
-@st.cache_data(max_entries=1)
-def load_stock_symbols() -> list[str]:
-    """Load all valid stock symbols from vnstock Listing API."""
-    symbols_df = Listing().all_symbols()
-    return sorted(symbols_df["symbol"].tolist())
-
-
-@st.cache_data
-def fetch_portfolio_stock_data(
-    symbols: list[str],
-    start_date_str: str,
-    end_date_str: str,
-    interval: str,
-) -> dict[str, pd.DataFrame]:
-    """Fetch historical stock data for multiple symbols via vnstock API."""
-    all_data = {}
-
-    for symbol in symbols:
-        try:
-            quote = Quote(symbol=symbol)
-            historical_data = quote.history(
-                start=start_date_str, end=end_date_str, interval=interval, to_df=True
-            )
-
-            if not historical_data.empty:
-                if "time" not in historical_data.columns:
-                    historical_data["time"] = historical_data.index
-
-                all_data[symbol] = historical_data
-        except Exception as e:
-            st.error(f"Error fetching data for {symbol}: {e}")
-
-    return all_data
-
-
-@st.cache_data
-def process_portfolio_price_data(
-    all_historical_data: dict[str, pd.DataFrame],
-) -> pd.DataFrame:
-    """Process historical data from multiple stocks into combined price dataframe."""
-    combined_prices = pd.DataFrame()
-
-    for symbol, data in all_historical_data.items():
-        if not data.empty:
-            if "time" not in data.columns:
-                if hasattr(data.index, "name") and data.index.name is None:
-                    data = data.reset_index()
-                data = data.rename(columns={data.columns[0]: "time"})
-
-            temp_df = data[["time", "close"]].copy()
-            temp_df.rename(columns={"close": f"{symbol}_close"}, inplace=True)
-
-            if combined_prices.empty:
-                combined_prices = temp_df
-            else:
-                combined_prices = pd.merge(combined_prices, temp_df, on="time", how="outer")
-
-    if combined_prices.empty:
-        return combined_prices
-
-    combined_prices = combined_prices.sort_values("time")
-    combined_prices.set_index("time", inplace=True)
-
-    close_price_columns = [col for col in combined_prices.columns if "_close" in col]
-    prices_df = combined_prices[close_price_columns]
-    prices_df.columns = [col.replace("_close", "") for col in close_price_columns]
-    prices_df = prices_df.dropna()
-
-    return prices_df
-
+# ---------------------------------------------------------------------------
+# Page config & sidebar
+# ---------------------------------------------------------------------------
 
 st.set_page_config(page_title="Stock Portfolio Optimization", page_icon="", layout="wide")
 
 inject_custom_success_styling()
 
 st.sidebar.header("Portfolio Configuration")
-
-DEFAULT_SYMBOLS = ["REE", "FMC", "DHC", "VNM", "VCB", "BID", "HPG", "FPT"]
 
 try:
     stock_symbols_list = load_stock_symbols()
@@ -203,7 +184,7 @@ except Exception:
 symbols = st.sidebar.multiselect(
     "Select ticker symbols:",
     options=stock_symbols_list,
-    default=["REE", "FMC", "DHC"],
+    default=["REE", "HPG", "FMC"],
     placeholder="Choose stock symbols...",
     help="Select multiple stock symbols for portfolio optimization",
 )
@@ -251,6 +232,10 @@ interval = "1D"
 start_date_str = start_date.strftime("%Y-%m-%d")
 end_date_str = end_date.strftime("%Y-%m-%d")
 
+# ---------------------------------------------------------------------------
+# Main content
+# ---------------------------------------------------------------------------
+
 st.title("Stock Portfolio Optimization")
 st.write("Optimize your portfolio using Modern Portfolio Theory")
 
@@ -262,7 +247,13 @@ if start_date >= end_date:
     st.error("Start date must be before end date.")
     st.stop()
 
-all_historical_data = fetch_portfolio_stock_data(symbols, start_date_str, end_date_str, interval)
+try:
+    all_historical_data = fetch_portfolio_stock_data(
+        tuple(sorted(symbols)), start_date_str, end_date_str, interval
+    )
+except ValueError as e:
+    st.error(str(e))
+    st.stop()
 
 if not all_historical_data:
     st.error("No data was fetched for any symbol. Please check your inputs.")
@@ -296,27 +287,16 @@ with st.expander("View Price Data"):
 
     st.write(f"Shape: {prices_df.shape}")
 
+# ---------------------------------------------------------------------------
+# Portfolio optimization (delegated to backend service)
+# ---------------------------------------------------------------------------
+
 returns = prices_df.pct_change().dropna()
-mu = expected_returns.mean_historical_return(prices_df)
-S = risk_models.sample_cov(prices_df)
+opt_results = cached_compute_optimizations(prices_df, risk_aversion)
 
-# Max Sharpe Ratio Portfolio
-ef_tangent = EfficientFrontier(mu, S)
-weights_tangent = ef_tangent.max_sharpe()
-weights_max_sharpe = ef_tangent.clean_weights()
-ret_tangent, std_tangent, sharpe = ef_tangent.portfolio_performance()
-
-# Min Volatility Portfolio
-ef_min_vol = EfficientFrontier(mu, S)
-ef_min_vol.min_volatility()
-weights_min_vol = ef_min_vol.clean_weights()
-ret_min_vol, std_min_vol, sharpe_min_vol = ef_min_vol.portfolio_performance()
-
-# Max Utility Portfolio
-ef_max_utility = EfficientFrontier(mu, S)
-ef_max_utility.max_quadratic_utility(risk_aversion=risk_aversion, market_neutral=False)
-weights_max_utility = ef_max_utility.clean_weights()
-ret_utility, std_utility, sharpe_utility = ef_max_utility.portfolio_performance()
+ms = opt_results.max_sharpe
+mv = opt_results.min_volatility
+mu_result = opt_results.max_utility
 
 st.header("Portfolio Optimization Results")
 
@@ -324,20 +304,24 @@ st.subheader("Performance Metrics")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.metric("Max Sharpe Portfolio", f"{sharpe:.4f}", f"Return: {(ret_tangent * 100):.1f}%")
+    st.metric(
+        "Max Sharpe Portfolio",
+        f"{ms.sharpe_ratio:.4f}",
+        f"Return: {(ms.expected_return * 100):.1f}%",
+    )
 
 with col2:
     st.metric(
         "Min Volatility Portfolio",
-        f"{sharpe_min_vol:.4f}",
-        f"Return: {(ret_min_vol * 100):.1f}%",
+        f"{mv.sharpe_ratio:.4f}",
+        f"Return: {(mv.expected_return * 100):.1f}%",
     )
 
 with col3:
     st.metric(
         "Max Utility Portfolio",
-        f"{sharpe_utility:.4f}",
-        f"Return: {(ret_utility * 100):.1f}%",
+        f"{mu_result.sharpe_ratio:.4f}",
+        f"Return: {(mu_result.expected_return * 100):.1f}%",
     )
 
 portfolio_choice = st.radio(
@@ -349,14 +333,13 @@ portfolio_choice = st.radio(
 )
 
 weights_by_strategy = {
-    "Max Sharpe Portfolio": weights_max_sharpe,
-    "Min Volatility Portfolio": weights_min_vol,
-    "Max Utility Portfolio": weights_max_utility,
+    "Max Sharpe Portfolio": ms.weights,
+    "Min Volatility Portfolio": mv.weights,
+    "Max Utility Portfolio": mu_result.weights,
 }
 selected_weights = weights_by_strategy[portfolio_choice]
 portfolio_label, portfolio_name = STRATEGY_MAP[portfolio_choice]
 symbol_display = ", ".join(symbols[:3]) + ("..." if len(symbols) > 3 else "")
-selected_weights_df = pd.DataFrame.from_dict(selected_weights, orient="index", columns=["Weights"])
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
     [
@@ -372,35 +355,20 @@ with tab1:
     st.subheader("Efficient Frontier Analysis")
     fig, ax = plt.subplots(figsize=(12, 8))
 
-    ef_plot = EfficientFrontier(mu, S)
+    ef_plot = EfficientFrontier(opt_results.mu, opt_results.cov_matrix)
     plotting.plot_efficient_frontier(ef_plot, ax=ax, show_assets=True)
 
     ax.scatter(
-        std_tangent,
-        ret_tangent,
-        marker="*",
-        s=200,
-        c="red",
-        label="Max Sharpe",
-        zorder=5,
+        ms.volatility, ms.expected_return,
+        marker="*", s=200, c="red", label="Max Sharpe", zorder=5,
     )
     ax.scatter(
-        std_min_vol,
-        ret_min_vol,
-        marker="*",
-        s=200,
-        c="green",
-        label="Min Volatility",
-        zorder=5,
+        mv.volatility, mv.expected_return,
+        marker="*", s=200, c="green", label="Min Volatility", zorder=5,
     )
     ax.scatter(
-        std_utility,
-        ret_utility,
-        marker="*",
-        s=200,
-        c="blue",
-        label="Max Utility",
-        zorder=5,
+        mu_result.volatility, mu_result.expected_return,
+        marker="*", s=200, c="blue", label="Max Utility", zorder=5,
     )
 
     n_samples = 5000
@@ -424,60 +392,59 @@ with tab1:
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        display_weights_table(weights_max_sharpe, "Max Sharpe Portfolio")
+        display_weights_table(ms.weights, "Max Sharpe Portfolio")
 
     with col2:
-        display_weights_table(weights_min_vol, "Min Volatility Portfolio")
+        display_weights_table(mv.weights, "Min Volatility Portfolio")
 
     with col3:
-        display_weights_table(weights_max_utility, "Max Utility Portfolio")
+        display_weights_table(mu_result.weights, "Max Utility Portfolio")
 
     st.subheader("Portfolio Weights Visualization")
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        display_pie_chart(weights_max_sharpe, "Max Sharpe Portfolio")
+        display_pie_chart(ms.weights, "Max Sharpe Portfolio")
 
     with col2:
-        display_pie_chart(weights_min_vol, "Min Volatility Portfolio")
+        display_pie_chart(mv.weights, "Min Volatility Portfolio")
 
     with col3:
-        display_pie_chart(weights_max_utility, "Max Utility Portfolio")
+        display_pie_chart(mu_result.weights, "Max Utility Portfolio")
 
     st.subheader("Detailed Performance Analysis")
     performance_df = pd.DataFrame(
         {
             "Portfolio": ["Max Sharpe", "Min Volatility", "Max Utility"],
             "Expected Return": [
-                f"{ret_tangent:.4f}",
-                f"{ret_min_vol:.4f}",
-                f"{ret_utility:.4f}",
+                f"{ms.expected_return:.4f}",
+                f"{mv.expected_return:.4f}",
+                f"{mu_result.expected_return:.4f}",
             ],
             "Volatility": [
-                f"{std_tangent:.4f}",
-                f"{std_min_vol:.4f}",
-                f"{std_utility:.4f}",
+                f"{ms.volatility:.4f}",
+                f"{mv.volatility:.4f}",
+                f"{mu_result.volatility:.4f}",
             ],
             "Sharpe Ratio": [
-                f"{sharpe:.4f}",
-                f"{sharpe_min_vol:.4f}",
-                f"{sharpe_utility:.4f}",
+                f"{ms.sharpe_ratio:.4f}",
+                f"{mv.sharpe_ratio:.4f}",
+                f"{mu_result.sharpe_ratio:.4f}",
             ],
         }
     )
     st.dataframe(performance_df, hide_index=True)
 
 with tab2:
-    hrp = HRPOpt(returns=returns)
-    weights_hrp = hrp.optimize()
+    hrp_result = cached_compute_hrp(returns)
 
     st.subheader("HRP Portfolio Weights")
-    display_weights_table(weights_hrp, "HRP Portfolio")
+    display_weights_table(hrp_result.weights, "HRP Portfolio")
 
     st.subheader("HRP Dendrogram")
     fig_dendro, ax_dendro = plt.subplots(figsize=(12, 8))
-    plotting.plot_dendrogram(hrp, ax=ax_dendro, show_tickers=True)
+    plotting.plot_dendrogram(hrp_result.hrp_instance, ax=ax_dendro, show_tickers=True)
     st.pyplot(fig_dendro)
     plt.close(fig_dendro)
 
@@ -497,15 +464,12 @@ with tab3:
 
     if st.button("Calculate Allocation", key="discrete_allocation"):
         try:
-            latest_prices = get_latest_prices(prices_df)
-            latest_prices_actual = latest_prices * VNSTOCK_PRICE_UNIT
-
-            da = DiscreteAllocation(
-                selected_weights,
-                latest_prices_actual,
-                total_portfolio_value=portfolio_value,
+            alloc_result = compute_discrete_allocation(
+                selected_weights, prices_df, portfolio_value
             )
-            allocation, leftover = da.greedy_portfolio()
+            allocation = alloc_result.allocation
+            leftover = alloc_result.leftover
+            latest_prices_actual = alloc_result.latest_prices_actual
 
             st.success(f"Allocation calculated successfully for {portfolio_label} Portfolio!")
 
@@ -579,7 +543,7 @@ with tab4:
     st.info(f"**Current Strategy**: {portfolio_choice}")
 
     if st.button("Generate Report", key="generate_excel_report"):
-        reports_dir = pathlib.Path(__file__).resolve().parent.parent / "exports" / "reports"
+        reports_dir = pathlib.Path(__file__).resolve().parent / "exports" / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
 
         report_weights_df = pd.DataFrame.from_dict(
@@ -590,7 +554,7 @@ with tab4:
         filename_base = f"{portfolio_name}_{timestamp}"
         filepath_base = reports_dir / filename_base
 
-        rp.excel_report(returns=returns, w=report_weights_df, name=filepath_base)
+        rp.excel_report(returns=returns, w=report_weights_df, name=str(filepath_base))
 
         st.success("Excel report generated successfully!")
 
@@ -633,6 +597,10 @@ with tab5:
     st.subheader("Risk Analysis Table")
 
     st.info(f"**Analyzing Strategy**: {portfolio_choice} | **Symbols**: {symbol_display}")
+
+    selected_weights_df = pd.DataFrame.from_dict(
+        selected_weights, orient="index", columns=["Weights"]
+    )
 
     fig, ax = plt.subplots(figsize=(12, 8))
 

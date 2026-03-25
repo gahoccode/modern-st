@@ -11,7 +11,7 @@ dependencies = [
     "pandas",
     "pyportfolioopt",
     "riskfolio-lib",
-    "streamlit",
+    "streamlit[starlette]",
     "vnstock",
 ]
 
@@ -20,7 +20,7 @@ pyopt = "pyopt_cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
-only-include = ["pyopt_cli.py", "streamlit_app.py"]
+only-include = ["pyopt_cli.py", "streamlit_app.py", "app.py", "backend"]
 
 [dependency-groups]
 dev = ["ruff"]
