@@ -35,14 +35,24 @@ uv run streamlit run streamlit_app.py
 ## Project Structure
 
 ```
-pyopt/
-├── streamlit_app.py       # Main Streamlit application
-├── pyopt_cli.py           # CLI entry point (pyopt command)
-├── pyproject.toml         # Project metadata and dependencies
-├── uv.lock                # Locked dependency versions
-├── requirements.txt       # Pip-compatible dependency list
-└── .streamlit/
-    └── config.toml        # Streamlit theme configuration
+modern-st/
+├── app.py                          ← ASGI entry point (st.App + FastAPI mount)
+├── server.py                       ← MCP server (FastMCP.from_fastapi)
+├── streamlit_app.py                ← Streamlit UI frontend
+├── pyopt_cli.py                    ← CLI entry point (pyopt command)
+├── pyproject.toml
+├── requirements.txt
+├── .streamlit/
+│   └── config.toml                 ← Streamlit theme configuration
+└── backend/
+    ├── api/
+    │   ├── exceptions.py           ← Domain exceptions + HTTP error handlers
+    │   ├── models.py               ← Pydantic request/response models
+    │   ├── utils.py                ← Shared data-fetching utilities
+    │   └── routes.py               ← FastAPI route handlers + app factory
+    └── services/
+        ├── data_service.py         ← vnstock data fetching
+        └── optimization_service.py ← PyPortfolioOpt logic
 ```
 
 ## Configuration
@@ -69,6 +79,8 @@ pyopt/
 | Package | Purpose |
 |---|---|
 | streamlit | Web application framework |
+| fastapi | REST API endpoints (mounted as sub-app on st.App) |
+| fastmcp | Auto-expose FastAPI routes as MCP tools |
 | pyportfolioopt | Mean-variance optimization, HRP, discrete allocation |
 | riskfolio-lib | Risk analysis, drawdown plots, Excel reports |
 | vnstock | Vietnamese stock market data |

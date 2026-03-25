@@ -1,16 +1,11 @@
-"""CLI entry point for the pyopt Streamlit application."""
+"""CLI entry point for the pyopt application."""
 
-import sys
-from pathlib import Path
+import uvicorn
 
 
 def main() -> None:
-    """Launch the Streamlit portfolio optimization app."""
-    from streamlit.web.cli import main as st_main
-
-    app_path = str(Path(__file__).parent / "app.py")
-    sys.argv = ["streamlit", "run", app_path, "--server.headless=true"]
-    st_main()
+    """Launch the pyopt app via uvicorn."""
+    uvicorn.run("app:app", host="0.0.0.0", port=8501)
 
 
 if __name__ == "__main__":

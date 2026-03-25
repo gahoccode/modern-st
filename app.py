@@ -1,15 +1,17 @@
-"""ASGI entry point for the pyopt Streamlit application.
-
-Uses Streamlit's experimental st.App (Starlette backend) to serve the
-Streamlit UI with custom API routes.
+"""ASGI entry point — FastAPI as root, Streamlit mounted as sub-app.
 
 Run with:
-    streamlit run app.py
     uvicorn app:app --reload
+    uv run pyopt
 """
 
-from streamlit.starlette import App
+from fastapi import FastAPI
+from streamlit.starlette import App as StreamlitApp
 
-from backend.api.routes import get_api_routes
+from backend.api.routes import api
 
-app = App("streamlit_app.py", routes=get_api_routes())
+streamlit_app = StreamlitApp("streamlit_app.py")
+
+app = FastAPI(lifespan=streamlit_app.lifespan())
+app.mount("/api", api)
+app.mount("/", streamlit_app)

@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 uv sync                                # Install/update dependencies
-uv run pyopt                           # Run app via CLI entry point
-uv run streamlit run app.py            # Run app via ASGI entry point
-uvicorn app:app --reload               # Run via external uvicorn
+uv run pyopt                           # Run app (uvicorn on port 8501)
+uvicorn app:app --reload               # Run with auto-reload
+uv run python server.py                # Run MCP server
 ```
 
 When changing dependencies, keep both files in sync:
@@ -21,10 +21,11 @@ uv export --format requirements-txt --no-emit-project > requirements.txt
 
 ## Architecture
 
-ASGI application using Streamlit 1.55's `st.App` (Starlette backend) with a reusable `backend/` package.
+Pattern B architecture: FastAPI as root, Streamlit mounted as sub-app. FastMCP auto-exposes API routes as MCP tools.
 
 ```
-app.py                    ← ASGI entry point (st.App + API routes)
+app.py                    ← ASGI entry point (FastAPI root + Streamlit mount)
+server.py                 ← MCP server (FastMCP.from_fastapi)
 streamlit_app.py          ← Streamlit UI frontend (caching + rendering)
 pyopt_cli.py              ← CLI wrapper (streamlit run app.py)
 backend/
@@ -32,14 +33,28 @@ backend/
 │   ├── data_service.py       ← vnstock data fetching (pure Python)
 │   └── optimization_service.py ← PyPortfolioOpt logic (pure Python)
 └── api/
-    └── routes.py             ← Starlette HTTP routes (/api/health, /api/info)
+    ├── exceptions.py         ← domain exceptions + HTTP error handlers
+    ├── models.py             ← Pydantic request/response models
+    ├── utils.py              ← shared data-fetching (get_price_matrix)
+    └── routes.py             ← thin FastAPI route handlers + app factory
 ```
 
 **Isolation boundary:** `backend/` has zero Streamlit imports. All `@st.cache_data` wrappers live in `streamlit_app.py` as thin delegators to backend service functions.
 
 **Data flow:** User sidebar inputs → `backend/services/data_service` (vnstock API) → pandas price matrix → `backend/services/optimization_service` (PyPortfolioOpt) → `streamlit_app.py` visualization (matplotlib/altair) + export (riskfolio-lib Excel reports)
 
-**API endpoints:** `/api/health` (service health check), `/api/info` (app metadata + strategies)
+**API endpoints (6 routes, mounted at `/api`):**
+
+| Method | Path | Description | MCP |
+|--------|------|-------------|-----|
+| `GET` | `/api/health` | Service health check | excluded (internal) |
+| `GET` | `/api/info` | App metadata + available strategies | excluded (internal) |
+| `GET` | `/api/symbols` | List all available stock symbols | tool |
+| `POST` | `/api/optimize` | Run all 3 optimization strategies | tool |
+| `POST` | `/api/hrp` | Run Hierarchical Risk Parity optimization | tool |
+| `POST` | `/api/allocate` | Convert weights to discrete share counts (VND) | tool |
+
+**MCP server** (`server.py`): `FastMCP.from_fastapi()` auto-converts FastAPI routes into MCP tools via the OpenAPI schema. Routes tagged `internal` are excluded via `mcp.disable(tags={"internal"})`.
 
 **Three optimization strategies** are computed upfront on every run:
 
@@ -69,3 +84,4 @@ A shared radio button (`portfolio_strategy_master`) controls which strategy is u
 - No test suite, linter, or CI pipeline configured yet
 - Keep FastAPI routes thin and separate from business logic
 - Decouple bussiness logic from framework
+- Draw project folder tree for preview before implementing a feature affecting significant architectural change
