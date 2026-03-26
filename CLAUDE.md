@@ -87,3 +87,4 @@ A shared radio button (`portfolio_strategy_master`) controls which strategy is u
 - Keep FastAPI routes thin and separate from business logic
 - Decouple bussiness logic from framework
 - Draw project folder tree for preview before implementing a feature affecting significant architectural change
+- Adhere to TDD

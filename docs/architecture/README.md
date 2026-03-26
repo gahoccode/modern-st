@@ -38,11 +38,41 @@ This directory contains comprehensive architecture documentation for PyOpt, foll
 | Layer | Technology | Purpose |
 |-------|------------|---------|
 | Frontend | Streamlit | Dashboard UI |
+| Frontend | Altair | Interactive charts |
 | API | FastAPI | REST endpoints |
 | MCP | FastMCP | Claude Desktop integration |
 | Optimization | PyPortfolioOpt | Mean-variance optimization |
 | Risk | riskfolio-lib | Risk metrics & reports |
 | Data | vnstock | Vietnamese stock data |
+
+### Project Structure
+
+```
+├── app.py                    # ASGI entry point (FastAPI root + Streamlit mount)
+├── server.py                 # MCP server (FastMCP.from_fastapi)
+├── streamlit_app.py          # Streamlit orchestration layer
+├── pyopt_cli.py              # CLI wrapper (streamlit run app.py)
+├── frontend/                 # Streamlit UI package
+│   ├── caching.py            # @st.cache_data wrappers
+│   ├── components.py         # Reusable UI components
+│   ├── sidebar.py            # Sidebar widget + SidebarInputs
+│   └── tabs/                 # Tab renderer modules
+│       ├── efficient_frontier.py
+│       ├── hrp.py
+│       ├── allocation.py
+│       ├── report.py
+│       └── risk_analysis.py
+└── backend/
+    ├── services/             # Business logic (framework-agnostic)
+    │   ├── data_service.py
+    │   ├── optimization_service.py
+    │   └── risk_service.py
+    └── api/                  # FastAPI layer
+        ├── routes.py
+        ├── models.py
+        ├── exceptions.py
+        └── utils.py
+```
 
 ### Mount Points
 

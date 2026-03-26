@@ -1,6 +1,6 @@
 [project]
 name = "pyopt"
-version = "0.1.0"
+version = "0.2.0"
 description = "Stock Portfolio Optimization using Modern Portfolio Theory"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,7 +22,7 @@ pyopt = "pyopt_cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
-only-include = ["pyopt_cli.py", "streamlit_app.py", "app.py", "server.py", "backend"]
+only-include = ["pyopt_cli.py", "streamlit_app.py", "app.py", "server.py", "backend", "frontend"]
 
 [dependency-groups]
 dev = ["ruff"]

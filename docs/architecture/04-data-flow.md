@@ -4,13 +4,13 @@
 
 ## Overview
 
-Data flows from user input through the Streamlit UI, to backend services, and finally to visualization or export. The architecture separates concerns: UI handles caching, services handle business logic.
+Data flows from user input through the Streamlit UI (frontend package), to backend services, and finally to visualization or export. The architecture separates concerns: frontend handles caching and UI, services handle business logic.
 
 ## Flow Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ USER INPUT                                                                   │
+│ USER INPUT (frontend/sidebar.py)                                            │
 │ symbols: ["REE", "HPG", "FPT"]                                               │
 │ start_date: "2024-01-01"                                                     │
 │ end_date: "2025-01-01"                                                       │
@@ -19,17 +19,19 @@ Data flows from user input through the Streamlit UI, to backend services, and fi
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ STREAMLIT UI (streamlit_app.py)                                              │
+│ FRONTEND LAYER (frontend/caching.py)                                         │
 │                                                                              │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │ @st.cache_data                                                       │    │
 │  │ fetch_portfolio_stock_data(tuple(symbols), start, end, "1D")        │    │
+│  │ → Delegates to backend/services/data_service                        │    │
 │  │ → Returns: dict[str, DataFrame]                                      │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │                                    │                                         │
 │                                    ▼                                         │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │ process_portfolio_price_data(all_historical_data)                   │    │
+│  │ → Delegates to backend/services/data_service                        │    │
 │  │ → Returns: DataFrame (prices, indexed by date)                       │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -83,11 +85,12 @@ Data flows from user input through the Streamlit UI, to backend services, and fi
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ VISUALIZATION / EXPORT                                                       │
+│ VISUALIZATION / EXPORT (frontend/tabs/)                                      │
 │                                                                              │
 │  ┌───────────────────┐  ┌───────────────────┐  ┌───────────────────────┐   │
 │  │ Efficient Frontier│  │ HRP Dendrogram    │  │ Risk Analysis         │   │
-│  │ (matplotlib)      │  │ (matplotlib)      │  │ (riskfolio plots)     │   │
+│  │ (efficient_       │  │ (hrp.py)          │  │ (risk_analysis.py)    │   │
+│  │ frontier.py)      │  │                   │  │                       │   │
 │  │                   │  │                   │  │                       │   │
 │  │ • 5000 portfolios │  │ • Cluster tree    │  │ • plot_table()        │   │
 │  │ • Scatter plot    │  │ • Asset linkage   │  │ • plot_drawdown()     │   │
@@ -96,9 +99,9 @@ Data flows from user input through the Streamlit UI, to backend services, and fi
 │                                                                              │
 │  ┌───────────────────┐  ┌───────────────────┐                               │
 │  │ Weights Donut     │  │ Excel Report      │                               │
-│  │ (Altair)          │  │ (riskfolio)       │                               │
+│  │ (components.py)   │  │ (report.py)       │                               │
 │  │                   │  │                   │                               │
-│  │ • 3 pie charts    │  │ • .xlsx download  │                               │
+│  │ • Altair chart    │  │ • .xlsx download  │                               │
 │  │ • Strategy split  │  │ • Performance     │                               │
 │  └───────────────────┘  └───────────────────┘                               │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -106,7 +109,7 @@ Data flows from user input through the Streamlit UI, to backend services, and fi
 
 ## Caching Strategy
 
-Streamlit's `@st.cache_data` is used to avoid redundant API calls and computations.
+Streamlit's `@st.cache_data` is used to avoid redundant API calls and computations. All cache decorators are isolated in `frontend/caching.py`.
 
 | Cached Function | Cache Key | Max Entries |
 |-----------------|-----------|-------------|
@@ -119,6 +122,7 @@ Streamlit's `@st.cache_data` is used to avoid redundant API calls and computatio
 - `tuple(sorted(symbols))` ensures consistent cache keys
 - DataFrame hashing works for small datasets
 - No cache on `process_portfolio_price_data()` (transform is cheap)
+- Cache wrappers delegate to backend services (zero Streamlit deps in backend)
 
 ## Price Data Transformation
 
