@@ -92,6 +92,17 @@ Add to your `claude_desktop_config.json`:
 
 This exposes 5 tools to Claude: `symbols`, `optimize`, `hrp`, `allocate`, and `risk`.
 
+## Architecture
+
+See [docs/architecture/](docs/architecture/) for comprehensive architecture documentation:
+
+- [System Context](docs/architecture/01-context.md) — C4 context diagram
+- [Container Architecture](docs/architecture/02-container.md) — Streamlit, FastAPI, MCP
+- [Component Architecture](docs/architecture/03-component.md) — Backend services breakdown
+- [Data Flow](docs/architecture/04-data-flow.md) — Request pipeline
+- [API Reference](docs/architecture/05-api-reference.md) — All 7 endpoints documented
+- [Architecture Decision Records](docs/architecture/adr/) — Key design decisions
+
 ## Dependencies
 
 | Package | Purpose |

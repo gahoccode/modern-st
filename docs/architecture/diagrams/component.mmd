@@ -1,0 +1,28 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#56524D', 'primaryTextColor': '#1F1916', 'primaryBorderColor': '#2B2523', 'lineColor': '#76706C', 'secondaryColor': '#D4D4D4', 'tertiaryColor': '#E4E4E4'}}}%%
+
+C4Component
+    title Component Diagram - Backend Services
+
+    Container_Boundary(api, "API Layer") {
+        Component(routes, "routes.py", "FastAPI router", "7 thin route handlers")
+        Component(models, "models.py", "Pydantic", "4 request models, 1 response model")
+        Component(exceptions, "exceptions.py", "Exception handlers", "PyoptError, DataFetchError, ProcessingError")
+        Component(utils, "utils.py", "Utilities", "get_price_matrix()")
+    }
+
+    Container_Boundary(services, "Services Layer") {
+        Component(data, "data_service.py", "Data fetching", "vnstock integration")
+        Component(optimization, "optimization_service.py", "PyPortfolioOpt", "Mean-variance optimization")
+        Component(risk, "risk_service.py", "riskfolio-lib", "24 risk metrics")
+    }
+
+    ContainerDb(vnstock, "vnstock API", "Quote, Listing")
+
+    Rel(routes, models, "Validates requests")
+    Rel(routes, utils, "Gets price matrix")
+    Rel(routes, exceptions, "Handles errors")
+    Rel(utils, data, "Fetches data")
+    Rel(routes, optimization, "Computes weights")
+    Rel(routes, risk, "Computes metrics")
+    Rel(data, vnstock, "HTTP")
+    Rel(optimization, risk, "Shares weights")

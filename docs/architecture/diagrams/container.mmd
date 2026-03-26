@@ -1,0 +1,24 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#56524D', 'primaryTextColor': '#1F1916', 'primaryBorderColor': '#2B2523', 'lineColor': '#76706C', 'secondaryColor': '#D4D4D4', 'tertiaryColor': '#E4E4E4'}}}%%
+
+C4Container
+    title Container Diagram - PyOpt Portfolio Optimizer
+
+    Person(user, "User", "Investor")
+    Person(claude, "Claude Desktop", "AI assistant")
+
+    System_Boundary(pyopt, "PyOpt Application") {
+        Container(streamlit, "Streamlit UI", "Python/Streamlit", "Interactive dashboard with 5 tabs")
+        Container(api, "FastAPI", "Python/FastAPI", "REST API with 7 endpoints")
+        Container(mcp, "MCP Server", "Python/FastMCP", "5 MCP tools exposed via OpenAPI")
+
+        ContainerDb(services, "Backend Services", "Python", "Data fetching, optimization, risk analysis")
+    }
+
+    System_Ext(vnstock, "vnstock API", "Vietnamese stock market data provider")
+
+    Rel(user, streamlit, "Uses", "HTTP/80")
+    Rel(claude, mcp, "MCP protocol", "stdio")
+    Rel(streamlit, services, "Calls directly", "Python")
+    Rel(api, services, "Delegates to", "Python")
+    Rel(mcp, api, "Wraps routes", "OpenAPI schema")
+    Rel(services, vnstock, "Quote.history()", "HTTP")
