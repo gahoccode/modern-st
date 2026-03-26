@@ -25,7 +25,7 @@ packages = ["."]
 only-include = ["pyopt_cli.py", "streamlit_app.py", "app.py", "server.py", "backend", "frontend"]
 
 [dependency-groups]
-dev = ["ruff"]
+dev = ["ruff", "pytest", "pytest-asyncio", "httpx"]
 
 [tool.ruff]
 line-length = 100
